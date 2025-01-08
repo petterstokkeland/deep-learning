@@ -69,6 +69,15 @@ def train(data, model, lr, n_epochs, checkpoint_name, max_len=50):
 
             optimizer.zero_grad()
             outputs, _ = model(src, src_lengths, tgt)
+            # Måtte trimme output for å matche
+            """
+            Tidligere verdier: 
+            outputs shape: torch.Size([64, 15, 93])
+            tgt shape: torch.Size([64, 14])
+            """
+            outputs = outputs[:, :tgt[:, 1:].size(1), :]
+            #print("outputs shape:", outputs.shape)  # (batch_size, max_tgt_len, vocab_size)
+            # print("tgt shape:", tgt[:, 1:].shape)   # (batch_size, max_tgt_len)
             loss = criterion(
                 outputs.reshape(-1, outputs.shape[-1]), tgt[:, 1:].reshape(-1)
             )
@@ -230,6 +239,29 @@ def nucleus_sampling(logits, p=0.8):
     # This is equivalent to selecting the tokens with highest probabilities, whose cumulative probability mass equals or exceeds p.
     # 3. Rescale the distribution and sample from the resulting set of tokens.
     # Implementation of the steps as described above:
+
+    # use softmax to transform to probailites
+    probabilities = torch.softmax(logits, dim=-1)  # Shape: (vocab_size,)
+    sorted_probs, sorted_indices = torch.sort(probabilities, descending=True)
+
+    # calc
+    cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
+
+    # fin top p prob. 
+    top_p_mask = cumulative_probs <= p
+    if not top_p_mask.any():  
+        top_p_mask[0] = True
+
+    sorted_probs = sorted_probs * top_p_mask
+
+    # normalization
+    sorted_probs /= sorted_probs.sum()
+    #find token
+    sampled_index = torch.multinomial(sorted_probs, 1)
+    # token index
+    token_index = sorted_indices[sampled_index]
+
+    return token_index
 
     raise NotImplementedError("Add your implementation.")
 
